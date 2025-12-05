@@ -1,0 +1,356 @@
+﻿<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tạo Avatar Sinh Nhật Co.opmart</title>
+    <style>
+        :root {
+            --primary-color: #d6001c; /* Đỏ Co.opmart */
+            --blue-color: #007bff;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 20px 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            text-align: center;
+            width: 100%;
+            max-width: 500px; /* Giới hạn chiều rộng trên máy tính */
+            box-sizing: border-box;
+        }
+
+        h1 {
+            color: var(--primary-color);
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+        }
+
+        p {
+            color: #666;
+            font-size: 0.9rem;
+            margin-bottom: 20px;
+        }
+
+        /* Vùng điều khiển file */
+        .upload-btn-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+            margin-bottom: 15px;
+        }
+
+        .btn-upload {
+            border: 2px dashed #ccc;
+            color: #555;
+            background-color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            display: block;
+        }
+
+        .upload-btn-wrapper input[type=file] {
+            font-size: 100px;
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            cursor: pointer;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Canvas container để responsive */
+        .canvas-container {
+            width: 100%;
+            position: relative;
+            margin: 0 auto;
+            /* Tỷ lệ khung hình vuông */
+            aspect-ratio: 1 / 1; 
+            overflow: hidden;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #eee;
+            touch-action: none; /* Quan trọng để drag trên mobile mượt hơn */
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            cursor: move;
+        }
+
+        /* Thanh điều khiển zoom */
+        .controls {
+            margin-top: 15px;
+            width: 100%;
+            display: none; /* Ẩn khi chưa có ảnh */
+        }
+
+        .range-slider {
+            width: 100%;
+            margin: 10px 0;
+        }
+
+        label {
+            font-size: 0.9rem;
+            font-weight: bold;
+            color: #333;
+        }
+
+        /* Nút tải về */
+        .action-btn {
+            display: none;
+            margin-top: 20px;
+            padding: 12px 24px;
+            background-color: var(--primary-color);
+            color: white;
+            text-decoration: none;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            border: none;
+            cursor: pointer;
+            width: 100%;
+            box-sizing: border-box;
+            box-shadow: 0 4px 6px rgba(214, 0, 28, 0.3);
+        }
+
+        .action-btn:active {
+            transform: scale(0.98);
+        }
+
+        /* Hướng dẫn nhỏ */
+        .note {
+            font-size: 0.8rem;
+            color: #888;
+            margin-top: 10px;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Avatar Sinh Nhật Coopmart</h1>
+        <p>Tải ảnh lên, căn chỉnh và tải về.</p>
+        
+        <div class="upload-btn-wrapper">
+            <button class="btn-upload">📸 Chọn ảnh từ thư viện</button>
+            <input type="file" id="image-loader" accept="image/*">
+        </div>
+
+        <div class="canvas-container">
+            <canvas id="image-canvas"></canvas>
+        </div>
+
+        <div class="controls" id="controls-area">
+            <label for="scale-slider">Phóng to / Thu nhỏ</label> <br>
+            <input type="range" id="scale-slider" class="range-slider" min="0.1" max="3.0" step="0.01" value="1">
+            <div class="note">Di chuyển ảnh bằng ngón tay để căn chỉnh</div>
+        </div>
+
+        <a id="download-btn" class="action-btn" href="#" download="avatar-coopmart-tieucan.png">Tải ảnh về máy</a>
+    </div>
+
+    <script>
+        const imageLoader = document.getElementById('image-loader');
+        const canvas = document.getElementById('image-canvas');
+        const ctx = canvas.getContext('2d');
+        const downloadBtn = document.getElementById('download-btn');
+        const controlsArea = document.getElementById('controls-area');
+        const scaleSlider = document.getElementById('scale-slider');
+
+        // Cấu hình kích thước ảnh xuất ra (Chất lượng cao)
+        const CANVAS_SIZE = 1000; 
+        canvas.width = CANVAS_SIZE;
+        canvas.height = CANVAS_SIZE;
+
+        // Biến trạng thái
+        let userImage = new Image();
+        let frameImage = new Image();
+        let isImageLoaded = false;
+        let isFrameLoaded = false;
+        
+        // Tên file khung của bạn
+        const FRAME_SOURCE = 'khungavt.png'; 
+
+        // Biến điều khiển vị trí và zoom
+        let imgScale = 1;
+        let imgPos = { x: 0, y: 0 };
+        let isDragging = false;
+        let startDragPos = { x: 0, y: 0 };
+
+        // Tải khung trước
+        frameImage.src = FRAME_SOURCE;
+        frameImage.onload = () => {
+            isFrameLoaded = true;
+            drawCanvas(); // Vẽ khung trống ban đầu
+        };
+        frameImage.onerror = () => {
+            alert("Không tìm thấy file khung ảnh (" + FRAME_SOURCE + "). Hãy đảm bảo file ảnh nằm cùng thư mục.");
+        };
+
+        // Xử lý khi người dùng chọn ảnh
+        imageLoader.addEventListener('change', function(e) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                userImage = new Image();
+                userImage.onload = function() {
+                    isImageLoaded = true;
+                    resetImageSettings(); // Reset vị trí và zoom cho ảnh mới
+                    controlsArea.style.display = 'block';
+                    downloadBtn.style.display = 'inline-block';
+                    drawCanvas();
+                }
+                userImage.src = event.target.result;
+            }
+            if(e.target.files[0]){
+                reader.readAsDataURL(e.target.files[0]);
+            }
+        }, false);
+
+        // Hàm tính toán hiển thị ảnh ban đầu (Fit ảnh vào khung)
+        function resetImageSettings() {
+            // Tính toán scale sao cho ảnh phủ kín canvas (cover) hoặc vừa khít (contain)
+            // Ở đây dùng logic "cover" (phủ kín) để đẹp hơn cho avatar
+            const scaleWidth = canvas.width / userImage.width;
+            const scaleHeight = canvas.height / userImage.height;
+            imgScale = Math.max(scaleWidth, scaleHeight);
+            
+            // Cập nhật giá trị thanh trượt
+            scaleSlider.value = imgScale;
+            // Cập nhật min max cho slider linh hoạt theo ảnh
+            scaleSlider.min = imgScale * 0.5;
+            scaleSlider.max = imgScale * 3.0;
+
+            // Căn giữa ảnh
+            imgPos.x = (canvas.width - userImage.width * imgScale) / 2;
+            imgPos.y = (canvas.height - userImage.height * imgScale) / 2;
+        }
+
+        // Hàm vẽ chính
+        function drawCanvas() {
+            // Xóa canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 1. Vẽ ảnh người dùng (nếu có)
+            if (isImageLoaded) {
+                ctx.save(); // Lưu trạng thái
+                // Vẽ ảnh với vị trí và kích thước hiện tại
+                ctx.drawImage(
+                    userImage, 
+                    imgPos.x, 
+                    imgPos.y, 
+                    userImage.width * imgScale, 
+                    userImage.height * imgScale
+                );
+                ctx.restore(); // Khôi phục
+            }
+
+            // 2. Vẽ khung đè lên trên
+            if (isFrameLoaded) {
+                ctx.drawImage(frameImage, 0, 0, canvas.width, canvas.height);
+            }
+            
+            // Cập nhật link tải về
+            updateDownloadLink();
+        }
+
+        // Xử lý Zoom (Slider)
+        scaleSlider.addEventListener('input', function() {
+            const oldScale = imgScale;
+            imgScale = parseFloat(this.value);
+
+            // Logic Zoom tâm: Giữ ảnh ở giữa khi zoom thay vì zoom từ góc trái
+            // (Tùy chọn nâng cao, ở đây giữ đơn giản là zoom và giữ nguyên góc trái trên hiện tại để user tự kéo)
+            
+            drawCanvas();
+        });
+
+        // Xử lý Kéo thả (Drag & Drop) - Hỗ trợ cả Touch và Mouse
+        function getPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            // Tính tỷ lệ giữa canvas thực tế (CSS) và canvas vẽ (1000px)
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+
+            let clientX, clientY;
+            
+            if (e.changedTouches) { // Cảm ứng
+                clientX = e.changedTouches[0].clientX;
+                clientY = e.changedTouches[0].clientY;
+            } else { // Chuột
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+
+            return {
+                x: (clientX - rect.left) * scaleX,
+                y: (clientY - rect.top) * scaleY
+            };
+        }
+
+        // Sự kiện bắt đầu kéo
+        function startDrag(e) {
+            if (!isImageLoaded) return;
+            e.preventDefault(); // Ngăn cuộn trang trên mobile
+            isDragging = true;
+            const pos = getPos(e);
+            startDragPos = { x: pos.x - imgPos.x, y: pos.y - imgPos.y };
+        }
+
+        // Sự kiện đang kéo
+        function drag(e) {
+            if (!isDragging) return;
+            e.preventDefault();
+            const pos = getPos(e);
+            imgPos.x = pos.x - startDragPos.x;
+            imgPos.y = pos.y - startDragPos.y;
+            drawCanvas();
+        }
+
+        // Sự kiện thả tay
+        function endDrag() {
+            isDragging = false;
+        }
+
+        // Gán sự kiện cho Mouse (Máy tính)
+        canvas.addEventListener('mousedown', startDrag);
+        canvas.addEventListener('mousemove', drag);
+        canvas.addEventListener('mouseup', endDrag);
+        canvas.addEventListener('mouseleave', endDrag);
+
+        // Gán sự kiện cho Touch (Điện thoại)
+        canvas.addEventListener('touchstart', startDrag, {passive: false});
+        canvas.addEventListener('touchmove', drag, {passive: false});
+        canvas.addEventListener('touchend', endDrag);
+
+        function updateDownloadLink() {
+            // Chuyển canvas thành URL ảnh
+            const dataURL = canvas.toDataURL('image/png');
+            downloadBtn.href = dataURL;
+        }
+
+    </script>
+
+</body>
+</html>
